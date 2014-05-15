@@ -175,3 +175,9 @@ class matcher(object):
 		elif isinstance(e, unaryexpr): return unaryexpr(e.operator, e.symbol, e.precedence, self.assigndic(e.operand), rows=self.assigndic(e.rows), cols=self.assigndic(e.cols), symmetric=e.symmetric)
 		elif isinstance(e, binaryexpr): return binaryexpr(e.operator, e.symbol, e.precedence, self.assigndic(e.left), self.assigndic(e.right), rows=self.assigndic(e.rows), cols=self.assigndic(e.cols), symmetric=e.symmetric)
 		else: return e
+
+	def count(self, pattern, e):
+		if self.equality(pattern, e): return 1
+		elif isinstance(e, unaryexpr): return self.count(pattern, e.operand)
+		elif isinstance(e, binaryexpr): return self.count(pattern, e.left) + self.count(pattern, e.right)
+		else: return 0

@@ -11,13 +11,12 @@ class LascException(Exception):
 def scalar(name): pass
 
 class expr(object):
-	def __init__(self, operator, symbol, precedence, rows=scalar('n'), cols=scalar('m'), symmetric=False):
+	def __init__(self, operator, symbol, precedence, rows=scalar('n'), cols=scalar('m')):
 		self._operator = operator
 		self._symbol = symbol
 		self._precedence = precedence
 		self._rows = rows
 		self._cols = cols
-		self._symmetric = symmetric
 
 	@property
 	def operator(self): return self._operator
@@ -29,8 +28,6 @@ class expr(object):
 	def rows(self): return self._rows
 	@property
 	def cols(self): return self._cols
-	@property
-	def symmetric(self): return self._symmetric
 
 	def __eq__(self, other):
 		return matcher().equality(self, other)
@@ -47,8 +44,8 @@ class expr(object):
 		return mult(other, self)
 
 class unaryexpr(expr):
-	def __init__(self, operator, symbol, precedence, operand, rows=scalar('n'), cols=scalar('m'), symmetric=False):
-		expr.__init__(self, operator, symbol, precedence, rows=rows, cols=cols, symmetric=symmetric)
+	def __init__(self, operator, symbol, precedence, operand, rows=scalar('n'), cols=scalar('m')):
+		expr.__init__(self, operator, symbol, precedence, rows=rows, cols=cols)
 		self._operand = operand
 
 	@property
@@ -61,11 +58,11 @@ class unaryexpr(expr):
 			return '%s%s' % (self.symbol, self.operand.__str__())
 
 	def __repr__(self):
-		return '(%s[%sx%s%s] %s)' % (self.operator, self.rows, self.cols, ' Sym' if self.symmetric == True else '', self.operand.__repr__())
+		return '(%s[%sx%s] %s)' % (self.operator, self.rows, self.cols, self.operand.__repr__())
 
 class binaryexpr(expr):
-	def __init__(self, operator, symbol, precedence, left, right, rows=scalar('n'), cols=scalar('m'), symmetric=False):
-		expr.__init__(self, operator, symbol, precedence, rows=rows, cols=cols, symmetric=symmetric)
+	def __init__(self, operator, symbol, precedence, left, right, rows=scalar('n'), cols=scalar('m')):
+		expr.__init__(self, operator, symbol, precedence, rows=rows, cols=cols)
 		self._left = left
 		self._right = right
 
@@ -86,43 +83,43 @@ class binaryexpr(expr):
 		return s
 
 	def __repr__(self):
-		return '(%s[%sx%s%s] %s %s)' % (self.operator, self.rows, self.cols, ' Sym' if self.symmetric == True else '', self.left.__repr__(), self.right.__repr__())
+		return '(%s[%sx%s] %s %s)' % (self.operator, self.rows, self.cols, self.left.__repr__(), self.right.__repr__())
 
 def scalar(name):
-	return unaryexpr('var', '', 0, name, rows=1, cols=1, symmetric=True)
+	return unaryexpr('var', '', 0, name, rows=1, cols=1)
 def scalartok(name):
-	return unaryexpr('tok', '', 0, name, rows=1, cols=1, symmetric=True)
+	return unaryexpr('tok', '', 0, name, rows=1, cols=1)
 
 def vector(name, rows=scalar('n')):
-	return unaryexpr('var', '', 0, name, rows=rows, cols=1, symmetric=False)
+	return unaryexpr('var', '', 0, name, rows=rows, cols=1)
 def vectortok(name, rows=scalartok('n')):
-	return unaryexpr('tok', '', 0, name, rows=rows, cols=1, symmetric=False)
+	return unaryexpr('tok', '', 0, name, rows=rows, cols=1)
 
 def matrix(name, rows=scalar('n'), cols=scalar('m')):
-	return unaryexpr('var', '', 0, name, rows=rows, cols=cols, symmetric=False)
+	return unaryexpr('var', '', 0, name, rows=rows, cols=cols)
 def matrixtok(name, rows=scalartok('n'), cols=scalartok('m')):
-	return unaryexpr('tok', '', 0, name, rows=rows, cols=cols, symmetric=False)
+	return unaryexpr('tok', '', 0, name, rows=rows, cols=cols)
 
 def smatrix(name, rows=scalar('n')):
-	return unaryexpr('var', '', 0, name, rows=rows, cols=rows, symmetric=True)
+	return unaryexpr('var', '', 0, name, rows=rows, cols=rows)
 def smatrixtok(name, rows=scalartok('n')):
-	return unaryexpr('tok', '', 0, name, rows=rows, cols=rows, symmetric=True)
+	return unaryexpr('tok', '', 0, name, rows=rows, cols=rows)
 
 def vec(e):
-	return unaryexpr('vec', 'vec', 0, e, rows=e.rows * e.cols, cols=1, symmetric=False)
+	return unaryexpr('vec', 'vec', 0, e, rows=e.rows * e.cols, cols=1)
 
 def t(e):
-	return unaryexpr('transpose', 't', 0, e, rows=e.cols, cols=e.rows, symmetric=e.symmetric)
+	return unaryexpr('transpose', 't', 0, e, rows=e.cols, cols=e.rows)
 
 def add(left, right):
 	if isinstance(left, expr) and isinstance(right, expr):
 		if left.cols != right.cols or left.rows != right.rows:
 			raise LascException('Operator add, incompatible matrices:\n%s\n%s' % (left.__repr__(), right.__repr__()))
-		return binaryexpr('add', '+', 2, left, right, rows=left.rows, cols=left.cols, symmetric=left.symmetric and right.symmetric)
+		return binaryexpr('add', '+', 2, left, right, rows=left.rows, cols=left.cols)
 	elif isinstance(left, expr) and isinstance(right, (int, long, float)):
-		return binaryexpr('add', '+', 2, left, right, rows=left.rows, cols=left.cols, symmetric=left.symmetric)
+		return binaryexpr('add', '+', 2, left, right, rows=left.rows, cols=left.cols)
 	elif isinstance(right, expr) and isinstance(left, (int, long, float)):
-		return binaryexpr('add', '+', 2, left, right, rows=right.rows, cols=right.cols, symmetric=right.symmetric)
+		return binaryexpr('add', '+', 2, left, right, rows=right.rows, cols=right.cols)
 	else:
 		raise LascException('Invalid operation `add` between %s and %s' % (left.__repr__(), right.__repr__()))
 
@@ -130,11 +127,11 @@ def mult(left, right):
 	if isinstance(left, expr) and isinstance(right, expr):
 		if left.cols != right.rows:
 			raise LascException('Operator mult, incompatible matrices:\n%s\n%s' % (left.__repr__(),right.__repr__()))
-		return binaryexpr('mult', '', 1, left, right, rows=left.rows, cols=right.cols, symmetric=left==t(right))
+		return binaryexpr('mult', '', 1, left, right, rows=left.rows, cols=right.cols)
 	elif isinstance(left, expr) and isinstance(right, (int, long, float)):
-		return binaryexpr('mult', '', 1, left, right, rows=left.rows, cols=left.cols, symmetric=left.symmetric)
+		return binaryexpr('mult', '', 1, left, right, rows=left.rows, cols=left.cols)
 	elif isinstance(right, expr) and isinstance(left, (int, long, float)):
-		return binaryexpr('mult', '', 1, left, right, rows=right.rows, cols=right.cols, symmetric=right.symmetric)
+		return binaryexpr('mult', '', 1, left, right, rows=right.rows, cols=right.cols)
 	else:
 		raise LascException('Invalid operation `mult` between %s and %s' % (left.__repr__(), right.__repr__()))
 
@@ -143,41 +140,47 @@ class matcher(object):
 		super(matcher, self).__init__()
 		self.dic = {}
 
-	def equality(self, a, b):
+	def equality(self, a, b, showproof=False, depth=0):
+		if showproof:
+			print '%sTesting %s = %s' % ((' ' * depth*2), a, b)
 		if a in self.dic:
-			return self.equality(self.dic[a], b)
+			if showproof:
+				print '%sRecall %s = %s' % ((' ' * depth*2), a, self.dic[a])
+			return self.equality(self.dic[a], b, showproof, depth+1)
 		if b in self.dic:
-			return self.equality(self.dic[b], a)
-		if a not in self.dic and isinstance(a, unaryexpr) and a.operator == 'tok' and (isinstance(b, (int, long, float)) and (self.equality(a.rows, 1) and self.equality(a.cols, 1)) or (isinstance(b, expr) and self.equality(b.rows, a.rows) and self.equality(b.cols, a.cols))):
+			if showproof:
+				print '%sRecall %s = %s' % ((' ' * depth*2), b, self.dic[b])
+			return self.equality(self.dic[b], a, showproof, depth+1)
+		if a not in self.dic and isinstance(a, unaryexpr) and a.operator == 'tok' and (isinstance(b, (int, long, float)) and (self.equality(a.rows, 1, showproof, depth+1) and self.equality(a.cols, 1, showproof, depth+1)) or (isinstance(b, expr) and b.operator != 'tok' and self.equality(b.rows, a.rows, showproof, depth+1) and self.equality(b.cols, a.cols, showproof, depth+1))):
+			if showproof:
+				print '%sLet %s = %s' % ((' '*depth*2), a, b)
 			self.dic[a] = b
 			return True
-		if b not in self.dic and isinstance(b, unaryexpr) and b.operator == 'tok' and (isinstance(a, (int, long, float)) and (self.equality(b.rows, 1) and self.equality(b.cols, 1)) or (isinstance(a, expr) and self.equality(a.rows, b.rows) and self.equality(a.cols, b.cols))):
+		if b not in self.dic and isinstance(b, unaryexpr) and b.operator == 'tok' and (isinstance(a, (int, long, float)) and (self.equality(b.rows, 1, showproof, depth+1) and self.equality(b.cols, 1, showproof, depth+1)) or (isinstance(a, expr) and a.operator != 'tok' and self.equality(a.rows, b.rows, showproof, depth+1) and self.equality(a.cols, b.cols, showproof, depth+1))):
+			if showproof:
+				print '%sLet %s = %s' % ((' '*depth*2), b, a)
 			self.dic[b] = a
 			return True
+		if isinstance(a, unaryexpr) and a.operator == 'tok' and isinstance(b, unaryexpr) and b.operator == 'tok' and a.operand == b.operand:
+			if showproof:
+				print '%s%s = %s' % ((' '*depth*2), a, b)
+			return True
 		if isinstance(a, (int, long, float)) and isinstance(b, (int, long, float)):
+			if showproof:
+				print '%s%s %s %s' % ((' '*depth*2), a, '=' if a == b else u'\u2260', b)
 			return a == b
 		if isinstance(a, unaryexpr) and a.operator == 'var' and isinstance(b, unaryexpr) and b.operator == 'var' and a.operand == b.operand:
+			if showproof:
+				print '%s%s = %s' % ((' '*depth*2), a, b)
 			return True
-		if isinstance(a, unaryexpr) and isinstance(b, unaryexpr) and a.operator == b.operator and self.equality(a.operand, b.operand):
+		if isinstance(a, unaryexpr) and isinstance(b, unaryexpr) and a.operator == b.operator and self.equality(a.operand, b.operand, showproof, depth+1):
+			if showproof:
+				print '%s%s = %s' % ((' '*depth*2), a, b)
 			return True
-		if isinstance(a, binaryexpr) and isinstance(b, binaryexpr) and a.operator == b.operator and self.equality(a.left, b.left) and self.equality(a.right, b.right):
+		if isinstance(a, binaryexpr) and isinstance(b, binaryexpr) and a.operator == b.operator and self.equality(a.left, b.left, showproof, depth+1) and self.equality(a.right, b.right, showproof, depth+1):
+			if showproof:
+				print '%s%s = %s' % ((' '*depth*2), a, b)
 			return True
+		if showproof:
+			print u'%s%s \u2260 %s' %((' '*depth*2), a, b)
 		return False
-
-	def replaceall(self, search, replace, e):
-		if self.equality(e, search): return self.assigndic(replace)
-		elif isinstance(e, unaryexpr): return unaryexpr(e.operator, e.symbol, e.precedence, self.replaceall(search, replace, e.operand), rows=e.rows, cols=e.cols, symmetric=e.symmetric)
-		elif isinstance(e, binaryexpr): return binaryexpr(e.operator, e.symbol, e.precedence, self.replaceall(search, replace, e.left), self.replaceall(search, replace, e.right), rows=e.rows, cols=e.cols, symmetric=e.symmetric)
-		else: return e
-
-	def assigndic(self, e):
-		if e in self.dic: return self.dic[e]
-		elif isinstance(e, unaryexpr): return unaryexpr(e.operator, e.symbol, e.precedence, self.assigndic(e.operand), rows=self.assigndic(e.rows), cols=self.assigndic(e.cols), symmetric=e.symmetric)
-		elif isinstance(e, binaryexpr): return binaryexpr(e.operator, e.symbol, e.precedence, self.assigndic(e.left), self.assigndic(e.right), rows=self.assigndic(e.rows), cols=self.assigndic(e.cols), symmetric=e.symmetric)
-		else: return e
-
-	def count(self, pattern, e):
-		if self.equality(pattern, e): return 1
-		elif isinstance(e, unaryexpr): return self.count(pattern, e.operand)
-		elif isinstance(e, binaryexpr): return self.count(pattern, e.left) + self.count(pattern, e.right)
-		else: return 0

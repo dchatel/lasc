@@ -102,7 +102,7 @@ def vec(e):
 	return unaryexpr('vec', 'vec', 0, e, rows=e.rows * e.cols, cols=1)
 
 def t(e):
-	return unaryexpr('transpose', 't', 0, e, rows=e.cols, cols=e.rows)
+	return unaryexpr('t', 't', 0, e, rows=e.cols, cols=e.rows)
 
 def add(left, right):
 	if isinstance(left, (int, long, float)): left = scalar(left)
@@ -110,10 +110,21 @@ def add(left, right):
 
 	if is_scalar(left) or is_scalar(right):
 		return binaryexpr('add', '+', 2, left, right, rows=max(left.rows, right.rows), cols=max(left.cols, right.cols))
-	elif left.rows == right.rows and left.cols == right.cols:
+	elif left.rows in equivalences(right.rows) and left.cols in equivalences(right.cols):
 		return binaryexpr('add', '+', 2, left, right, rows=left.rows, cols=left.cols)
 
 	raise LascException('Operator add, incompatible matrices:\n%s\n%s' % (left.__repr__(), right.__repr__()))
+
+def sub(left, right):
+	if isinstance(left, (int, long, float)): left = scalar(left)
+	if isinstance(right, (int, long, float)): right = scalar(right)
+
+	if is_scalar(left) or is_scalar(right):
+		return binaryexpr('sub', '-', 2, left, right, rows=max(left.rows, right.rows), cols=max(left.cols, right.cols))
+	elif left.rows == right.rows and left.cols == right.cols:
+		return binaryexpr('sub', '-', 2, left, right, rows=left.rows, cols=left.cols)
+
+	raise LascException('Operator sub, incompatible matrices:\n%s\n%s' % (left.__repr__(), right.__repr__()))
 
 def mult(left, right):
 	if isinstance(left, (int, long, float)): left = scalar(left)
@@ -121,10 +132,19 @@ def mult(left, right):
 
 	if is_scalar(left) or is_scalar(right):
 		return binaryexpr('mult', '', 1, left, right, rows=max(left.rows, right.rows), cols=max(left.cols, right.cols))
-	elif left.cols == right.rows:
+	elif left.cols in equivalences(right.rows):
 		return binaryexpr('mult', '', 1, left, right, rows=left.rows, cols=right.cols)
 
 	raise LascException('Operator mult, incompatible matrices:\n%s\n%s' % (left.__repr__(),right.__repr__()))
+
+def schur(left, right):
+	if not is_scalar(left) and not is_scalar(right) and left.rows == right.rows and left.cols == right.cols:
+		return binaryexpr('schur', u'\u2299', 1, left, right, rows=left.rows, cols=left.cols)
+
+	raise LascException('Operator sub, incompatible matrices:\n%s\n%s' % (left.__repr__(), right.__repr__()))
+
+def kron(left, right):
+	return binaryexpr('kron', u'\u2297', 1, left, right, rows=left.rows*right.cols, cols=left.cols*right.cols)
 
 def is_scalar(e):
 	return isinstance(e, expr) and e.rows == 1 and e.cols == 1
@@ -168,7 +188,7 @@ def match_exact(pattern, e):
 			if pattern.operator == 'var':
 				dic[pattern] = e
 				equal = True
-			else: equal = pattern.operator == e.operator and internal(pattern.operand, e.operand)
+			else: equal = isinstance(e, unaryexpr) and pattern.operator == e.operator and internal(pattern.operand, e.operand)
 		else: equal = isinstance(pattern, binaryexpr) and isinstance(e, binaryexpr) and pattern.operator == e.operator and internal(pattern.left, e.left) and internal(pattern.right, e.right)
 		return equal
 
@@ -187,7 +207,11 @@ def matchall(pattern, e):
 	def internal(pattern, e):
 		m = match_exact(pattern, e)
 		if m.matched: matches.append(m.map)
-		if isinstance(e, unaryexpr): internal(pattern, e.operand)
+		if isinstance(e, expr):
+			internal(pattern, e.rows)
+			internal(pattern, e.cols)
+		if isinstance(e, unaryexpr):
+			internal(pattern, e.operand)
 		elif isinstance(e, binaryexpr):
 			internal(pattern, e.left)
 			internal(pattern, e.right)
@@ -201,13 +225,83 @@ def rewrite(rewrited, dic):
 	elif isinstance(rewrited, unaryexpr):
 		return unaryexpr(rewrited.operator, rewrited.symbol, rewrited.precedence, rewrite(rewrited.operand, dic), rows=rewrite(rewrited.rows, dic), cols=rewrite(rewrited.cols, dic))
 	elif isinstance(rewrited, binaryexpr):
-		return unaryexpr(rewrited.operator, rewrited.symbol, rewrited.precedence, rewrite(rewrited.left, dic), rewrite(rewrited.right, dic), rows=rewrite(rewrited.rows, dic), cols=rewrite(rewrited.cols, dic))
+		return binaryexpr(rewrited.operator, rewrited.symbol, rewrited.precedence, rewrite(rewrited.left, dic), rewrite(rewrited.right, dic), rows=rewrite(rewrited.rows, dic), cols=rewrite(rewrited.cols, dic))
+	else:
+		return rewrited
 
-def reduceall(original, rewrited, e):
-	m = match_exact(original, e)
-	if m.matched:
-			return rewrite(rewrited, m)
-	if isinstance(e, unaryexpr):
-		return unaryexpr(e.operator, e.symbol, e.precedence, reduceall(original, rewrited, e.operand), reduceall(original, rewrited, e.rows), reduceall(original, rewrited, e.cols))
-	elif isinstance(e, binaryexpr):
-		return binaryexpr(e.operator, e.symbol, e.precedence, reduceall(original, rewrited, e.left), reduceall(original, rewrited, e.right), reduceall(original, rewrited, e.rows), reduceall(original, rewrited, e.cols))
+def equality(a, b):
+	if identic(a, b):
+		return True
+	for r in rules:
+		m = match_exact(r, b)
+		if m.matched and identic(a, rewrite(rules[r], m.map)):
+			return True
+	return False
+
+def replace(p, r, f):
+	if identic(p, f):
+		return r
+	elif isinstance(f, unaryexpr):
+		return unaryexpr(f.operator, f.symbol, f.precedence, replace(p, r, f.operand), rows=replace(p, r, f.rows), cols=replace(p, r, f.cols))
+	elif isinstance(f, binaryexpr):
+		return binaryexpr(f.operator, f.symbol, f.precedence, replace(p, r, f.left), replace(p, r, f.right), rows=replace(p, r, f.rows), cols=replace(p,r , f.cols))
+	else:
+		return f
+
+def nei(f):
+	for p,r in rules.iteritems():
+		m = matchall(p, f)
+		for i in m:
+			a = rewrite(p, i)
+
+
+def neighbors(f):
+	equiv = set()
+	for p,r in rules.iteritems():
+		m = matchall(p, f)
+		for i in m:
+			a = rewrite(p, i)
+			b = rewrite(r, i)
+			equiv.add(replace(a, b, f))
+		#m = match_exact(p, f)
+		#if m.matched:
+		#	equiv.add(rewrite(r, m.map))
+		#if isinstance(f, unaryexpr):
+		#	e = neighbors(f.operand)
+		#	equiv.union([globals()[f.operator](i) for i in e])
+		#if isinstance(f, binaryexpr):
+		#	e = neighbors(f.left)
+		#	equiv = equiv.union([globals()[f.operator](i, f.right) for i in e])
+		#	e = neighbors(f.right)
+		#	equiv = equiv.union([globals()[f.operator](f.left, i) for i in e])
+	return equiv
+
+def equivalences(f):
+	equiv = set()
+
+	def internal(f):
+		if f not in equiv:
+			equiv.add(f)
+			for i in neighbors(f):
+				internal(i)
+
+	internal(f)
+	return equiv
+
+a = scalar('a')
+b = scalar('b')
+x = matrix('x',scalar('x0'),scalar('x1'))
+y = matrix('y',scalar('x1'),scalar('y1'))
+z = matrix('z',scalar('y1'),scalar('z1'))
+
+rules = {}
+#	x+x: 2*x,
+#	a*x+x: (a+1)*x,
+#	(a+1)*x: a*x+x,
+#	a*x+b*x: (a+b)*x,
+#	(a+b)*x: a*x+b*x,
+rules[a*b] = b*a
+rules[x*y*z] = x*(y*z)
+rules[x*(y*z)] = x*y*z
+rules[vec(x*y*z)] = kron(t(z),x)*vec(y)
+rules[kron(t(z),x)*vec(y)] = vec(x*y*z)
